@@ -37,7 +37,6 @@ def pca(x: np.ndarray,
         ax.scatter(*np.transpose(x))
         plt.show()
 
-    return e_val, e_vec
 
 
 if __name__ == "__main__":
