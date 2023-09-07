@@ -4,6 +4,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 from tqdm import tqdm
 
+
 class HopfieldNetwork:
     def __init__(self, n: int, p: int, ts: float = 1):
         self.memory_states = self.construct_memory_states(p, n)
@@ -94,4 +95,4 @@ def p_exp(p_range: int, idx: int = 0, t: int = 5, n: int = 100):
 if __name__ == "__main__":
     # obj = HopfieldNetwork(100, 1)
     # obj.run(HopfieldNetwork.construct_memory_states(1, 100)[0], 5, True)
-    p_exp(200)
+    p_exp(40, t=30)
