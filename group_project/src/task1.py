@@ -6,6 +6,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import seaborn as sns
 from sklearn . decomposition import PCA
+from sklearn.impute import SimpleImputer
 
 BP = os.path.realpath(os.path.join(os.path.realpath(__file__), "../.."))
 
@@ -63,15 +64,24 @@ class Dataset:
 
     def task_1(self):
         orig_shape = self.data["Day_EO-2"].binocular.shape
-        d1 = self.data["Day_EO-2"].binocular
+        d1 = self.data["Day_EO+6"].binocular
         # preprocess
         d1 = np.reshape(d1, d1.shape[:3]+tuple([d1.shape[-1] * d1.shape[-2]]))
         d1 = zscore(d1, axis=-1, nan_policy="omit")
         # PCA:
         x = np.reshape(d1[2], (d1[2].shape[0]*d1[2].shape[1], d1[2].shape[-1]))
-        pca = PCA(n_components=orig_shape[-1] * orig_shape[-2])
+        print(x.shape)
+        imp_mean = SimpleImputer(missing_values=np.nan, strategy='mean')
+        x = imp_mean.fit_transform(x)
+        print(x.shape)
+        #x = np.reshape(x[~np.isnan(x)], (96, int(len(x[~np.isnan(x)]) / 96)))
+        print(x.shape)
+        pca = PCA(n_components=2)
         pca_data = pca.fit_transform(x)
-        fig = plt.scatter(*np.transpose(pca_data), c=d1[])
+        fig = plt.scatter(*np.transpose(pca_data),
+                          #c=d1[]
+                          )
+        plt.show()
 
     def plot_frame(self, frame: np.ndarray):
         sns.heatmap(frame, vmax=.3, square=True, cmap="YlGnBu")
@@ -84,4 +94,5 @@ frame[roi] 0"""
 
 if __name__ == "__main__":
     ds = Dataset()
+    # ds.verify_dataset()
     ds.task_1()
