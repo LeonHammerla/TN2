@@ -1,6 +1,6 @@
 import os
 from dataclasses import dataclass
-from typing import Optional, Dict, Callable
+from typing import Optional, Dict, Callable, Any
 from sklearn.manifold import TSNE, Isomap, SpectralEmbedding, MDS
 import numpy as np
 import matplotlib.pyplot as plt
@@ -10,6 +10,7 @@ from sklearn.manifold import LocallyLinearEmbedding as LLE
 from sklearn.impute import SimpleImputer
 from sklearn import preprocessing
 from cebra import CEBRA
+import matplotlib.pyplot as plt
 
 BP = os.path.realpath(os.path.join(os.path.realpath(__file__), "../.."))
 
@@ -66,13 +67,15 @@ class Dataset:
             print(20 * "=")
 
     def dim_reduction(self,
-                      reduction_method: Callable[[np.ndarray, int], np.ndarray],
+                      reduction_method: Callable[[np.ndarray, int, Optional[Any]], np.ndarray],
                       day: str = "Day_EO+6",
                       time_point: int = 2,
                       dim: int = 2,
                       save: bool = True
                       ):
+        # zB (8, 18, 8, 135, 160)
         orig_shape = self.data[day].binocular.shape
+        # print(orig_shape)
         d1 = self.data[day].binocular
         # preprocess
         d1 = np.reshape(d1, d1.shape[:3] + tuple([d1.shape[-1] * d1.shape[-2]]))
@@ -81,14 +84,15 @@ class Dataset:
         d1 = imp_mean.fit_transform(d1)
         x = preprocessing.normalize(d1)
 
-        # Dim-Reduction:
-        reduced_data = reduction_method(x, dim)
         colors = []
-        """
-        for i in range(orig_shape[1]):
-        # for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
-            for j in [0, 45, 90, 135, 22.5, 67.5, 112.5, 157.5]:
-                colors.append(j)"""
+
+        """for i in range(orig_shape[1]):
+        for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
+            colors.extend(18*[j])
+            #for j in [0, 45, 90, 135, 22.5, 67.5, 112.5, 157.5]:
+                #colors.append(j)"""
+
+        # used
         for i in range(orig_shape[1] // 2):
 
             # for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
@@ -100,6 +104,13 @@ class Dataset:
             for j in [22.5, 67.5, 112.5, 157.5, 22.5, 67.5, 112.5, 157.5]:
                 colors.append(j)
 
+        colors = np.array(colors)
+        # Dim-Reduction:
+        if reduction_method.__name__ == "f_cebra":
+            reduced_data = reduction_method(x, dim, labels=colors)
+        else:
+            reduced_data = reduction_method(x, dim)
+        reduced_data = preprocessing.normalize(reduced_data)
         # plot for 2 dimensoins
         if dim == 2:
             fig = plt.scatter(x=np.transpose(reduced_data)[1],
@@ -114,7 +125,7 @@ class Dataset:
             plt.ylabel("Y")
             plt.title(f"{reduction_method.__name__.split('_')[-1]}_{day}_dim={dim}_tp={time_point}")
             plt.legend(*fig.legend_elements(),
-                       loc="lower right", title="Classes")
+                       loc="lower right", title="Classes", bbox_to_anchor=(1.1, 0.5))
             if save:
                 os.makedirs(os.path.join(BP, "data", f"{day}__tp={time_point}"), exist_ok=True)
                 plt.savefig(os.path.join(BP, "data", f"{day}__tp={time_point}",
@@ -134,7 +145,7 @@ class Dataset:
             plt.ylabel("Y")
             plt.ylabel("Z")
             plt.title(f"{reduction_method.__name__.split('_')[-1]}_{day}_dim={dim}_tp={time_point}")
-            ax.legend()
+            plt.legend()
             if save:
                 os.makedirs(os.path.join(BP, "data", f"{day}__tp={time_point}"), exist_ok=True)
                 plt.savefig(os.path.join(BP, "data", f"{day}__tp={time_point}",
@@ -142,58 +153,58 @@ class Dataset:
             plt.show()
 
     @staticmethod
-    def f_pca(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_pca(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         pca = PCA(n_components=dim)
         return pca.fit_transform(x)
 
     @staticmethod
-    def f_tsne(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_tsne(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         tsne = TSNE(n_components=dim)
         return tsne.fit_transform(x)
 
     @staticmethod
-    def f_lle(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_lle(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         lle = LLE(n_components=dim, n_neighbors=int(dim * (dim + 3) / 2) + 1)
         return lle.fit_transform(x)
 
     @staticmethod
-    def f_mod_lle(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_mod_lle(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         lle = LLE(n_components=dim, method="modified", n_neighbors=int(dim * (dim + 3) / 2) + 1)
         return lle.fit_transform(x)
 
     @staticmethod
-    def f_hessian_lle(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_hessian_lle(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         lle = LLE(n_components=dim, method="hessian", n_neighbors=int(dim * (dim + 3) / 2) + 1)
         return lle.fit_transform(x)
 
     @staticmethod
-    def f_tangent_lle(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_tangent_lle(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         lle = LLE(n_components=dim, method="ltsa", n_neighbors=int(dim * (dim + 3) / 2) + 1)
         return lle.fit_transform(x)
 
     @staticmethod
-    def f_isomap(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_isomap(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         iso = Isomap(n_components=dim)
         return iso.fit_transform(x)
 
     @staticmethod
-    def f_spectral(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_spectral(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         spec = SpectralEmbedding(n_components=dim)
         return spec.fit_transform(x)
 
     @staticmethod
-    def f_mds(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_mds(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         mds = MDS(n_components=dim)
         return mds.fit_transform(x)
 
     @staticmethod
-    def f_umap(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_umap(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         from umap import UMAP
         umap_2d = UMAP(n_components=dim, init='random', random_state=0)
         return umap_2d.fit_transform(x)
 
     @staticmethod
-    def f_cebra(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_cebra(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         cebra_model = CEBRA(
             model_architecture="offset10-model",
             batch_size=16,
@@ -205,10 +216,10 @@ class Dataset:
             device="cuda_if_available",
             verbose=True
         )
-        return cebra_model.fit_transform(x)
+        return cebra_model.fit_transform(x, kwargs["labels"])
 
     @staticmethod
-    def f_rastermap(x: np.ndarray, dim: int) -> np.ndarray:
+    def f_rastermap(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         from rastermap import Rastermap, utils
         model = Rastermap(n_PCs=dim, n_clusters=100,
                           locality=0.75, time_lag_window=5).fit(x)
@@ -217,6 +228,23 @@ class Dataset:
     def plot_frame(self, frame: np.ndarray):
         sns.heatmap(frame, vmax=.3, square=True, cmap="YlGnBu")
         plt.show()
+
+    @staticmethod
+    def animate_plots(day: str,
+                      function_name: str = "pca",
+                      dim: int = 2,
+                      interval=6000):
+        from matplotlib.animation import FuncAnimation
+        nframes = 8
+        plt.subplots_adjust(top=1, bottom=0, left=0, right=1)
+
+        def animate(i):
+            im = plt.imread(os.path.join(BP, "data", f"{day}__tp={i}", f"{function_name}_dim={dim}.png"))
+            plt.imshow(im)
+
+        anim = FuncAnimation(plt.gcf(), animate, frames=nframes,
+                             interval=(interval / nframes))
+        anim.save(filename=os.path.join(BP, "data/gifs", f"{day}_{function_name}_dim={dim}.gif"), writer='imagemagick')
 
     def run_all(self,
                 day: str = "Day_EO+6",
@@ -231,10 +259,14 @@ class Dataset:
             method = getattr(self, method)
             self.dim_reduction(method, day, time_point, 3, save)
 
+    def run_all_whole_day(self, day: str):
+        for t in range(8):
+            ds.run_all(day=day, time_point=t)
+        for method in [i for i in dir(self) if i[:2] == "f_" and callable(getattr(self, i))]:
+            method = method.split("_")[-1]
+            self.animate_plots(day=day, dim=2, function_name=method)
+            self.animate_plots(day=day, dim=3, function_name=method)
 
-"""roi 0 np.isfinit(frame)
-frame = np.empty_like(roi)
-frame[roi] 0"""
 
 if __name__ == "__main__":
     ds = Dataset()
@@ -251,5 +283,13 @@ if __name__ == "__main__":
     ds.task_1(Dataset.f_cebra, time_point=2)
     ds.task_1(Dataset.f_rastermap, time_point=2)
     """
-    # ds.dim_reduction(Dataset.f_pca, time_point=1, dim=3)
-    ds.run_all(day="Day_EO+4")
+    # ds.dim_reduction(Dataset.f_cebra, time_point=1, dim=3)
+    ds.dim_reduction(Dataset.f_pca, time_point=2, dim=3)
+    # ds.dim_reduction(Dataset.f_cebra, time_point=2, dim=2)
+    # ds.dim_reduction(Dataset.f_cebra, time_point=2, dim=3)
+    """for t in range(8):
+        ds.run_all(day="Day_EO+6", time_point=t)
+    f = "isomap"
+    ds.animate_plots(day="Day_EO+6", dim=2, function_name=f)
+    ds.animate_plots(day="Day_EO+6", dim=3, function_name=f)"""
+
