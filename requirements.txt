@@ -7,3 +7,4 @@ seaborn
 cebra
 umap-learn
 rastermap
+colorcet
