@@ -1,6 +1,6 @@
-import os
+import os, sys
 from dataclasses import dataclass
-from typing import Optional, Dict, Callable, Any
+from typing import Optional, Dict, Callable, Any, Tuple
 from sklearn.manifold import TSNE, Isomap, SpectralEmbedding, MDS
 import numpy as np
 import matplotlib.pyplot as plt
@@ -13,6 +13,16 @@ from cebra import CEBRA
 import matplotlib.pyplot as plt
 
 BP = os.path.realpath(os.path.join(os.path.realpath(__file__), "../.."))
+
+
+class HiddenPrints:
+    def __enter__(self):
+        self._original_stdout = sys.stdout
+        sys.stdout = open(os.devnull, 'w')
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        sys.stdout.close()
+        sys.stdout = self._original_stdout
 
 
 @dataclass
@@ -71,12 +81,24 @@ class Dataset:
                       day: str = "Day_EO+6",
                       time_point: int = 2,
                       dim: int = 2,
-                      save: bool = True
-                      ):
-        # zB (8, 18, 8, 135, 160)
-        orig_shape = self.data[day].binocular.shape
-        # print(orig_shape)
-        d1 = self.data[day].binocular
+                      save: bool = True,
+                      train_svm: bool = False,
+                      data_type: str = "bin",
+                      do_plot: bool = True
+                      ) -> Optional[float]:
+        if data_type == "bin":
+            # zB (8, 18, 8, 135, 160)
+            orig_shape = self.data[day].binocular.shape
+            # print(orig_shape)
+            d1 = self.data[day].binocular
+        elif data_type == "contra":
+            orig_shape = self.data[day].contra.shape
+            d1 = self.data[day].contra
+        elif data_type == "ipsi":
+            orig_shape = self.data[day].ipsi.shape
+            d1 = self.data[day].ipsi
+        else:
+            raise Exception("Specify valid dataset")
         # preprocess
         d1 = np.reshape(d1, d1.shape[:3] + tuple([d1.shape[-1] * d1.shape[-2]]))
         d1 = np.reshape(d1[time_point], (d1[time_point].shape[0] * d1[time_point].shape[1], d1[time_point].shape[-1]))
@@ -85,23 +107,25 @@ class Dataset:
         x = preprocessing.normalize(d1)
 
         colors = []
-
-        """for i in range(orig_shape[1]):
-        for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
-            colors.extend(18*[j])
-            #for j in [0, 45, 90, 135, 22.5, 67.5, 112.5, 157.5]:
-                #colors.append(j)"""
-
-        # used
+        """cc = 3*[0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]
+        for i in range(orig_shape[1]):
+            colors.extend(8*[cc[i]])
+                
+        for i in range(orig_shape[1]):
+            for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
+                colors.append(j)
+        """# used
         for i in range(orig_shape[1] // 2):
 
             # for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
             for j in [0, 45, 90, 135, 0, 45, 90, 135]:
+            # for j in [0, 22.5, 45, 67.6, 0, 22.5, 45, 67.6]:
                 colors.append(j)
         for i in range(orig_shape[1] // 2, orig_shape[1]):
 
             # for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
             for j in [22.5, 67.5, 112.5, 157.5, 22.5, 67.5, 112.5, 157.5]:
+            # for j in [90, 112.5, 135, 157.5, 90, 112.5, 135, 157.5]:
                 colors.append(j)
 
         colors = np.array(colors)
@@ -111,88 +135,74 @@ class Dataset:
         else:
             reduced_data = reduction_method(x, dim)
         reduced_data = preprocessing.normalize(reduced_data)
-        # plot for 2 dimensoins
-        if dim == 2:
-            fig = plt.scatter(x=np.transpose(reduced_data)[1],
-                              y=np.transpose(reduced_data)[0],
-                              c=colors,
-                              s=100,
-                              cmap="hsv",
-                              vmin=0,
-                              vmax=180
-                              )
-            plt.xlabel("X")
-            plt.ylabel("Y")
-            plt.title(f"{reduction_method.__name__.split('_')[-1]}_{day}_dim={dim}_tp={time_point}")
-            plt.legend(*fig.legend_elements(),
-                       loc="lower right", title="Classes", bbox_to_anchor=(1.1, 0.5))
-            if save:
-                os.makedirs(os.path.join(BP, "data", f"{day}__tp={time_point}"), exist_ok=True)
-                plt.savefig(os.path.join(BP, "data", f"{day}__tp={time_point}",
-                                         f"{reduction_method.__name__.split('_')[-1]}_dim={dim}.png"))
-            plt.show()
-        elif dim == 3:
-            fig = plt.figure()
-            ax = fig.add_subplot(projection='3d')
-            ax.scatter(*np.transpose(reduced_data),
-                       c=colors,
-                       s=100,
-                       cmap="hsv",
-                       vmin=0,
-                       vmax=180
-                       )
-            plt.xlabel("X")
-            plt.ylabel("Y")
-            plt.ylabel("Z")
-            plt.title(f"{reduction_method.__name__.split('_')[-1]}_{day}_dim={dim}_tp={time_point}")
-            plt.legend()
-            if save:
-                os.makedirs(os.path.join(BP, "data", f"{day}__tp={time_point}"), exist_ok=True)
-                plt.savefig(os.path.join(BP, "data", f"{day}__tp={time_point}",
-                                         f"{reduction_method.__name__.split('_')[-1]}_dim={dim}.png"))
-            plt.show()
+        f1 = None
+        if train_svm:
+            acc, f1 = self.train_svm(reduced_data, colors)
+        if do_plot:
+            # plot for 2 dimensoins
+            if dim == 2:
+                fig = plt.scatter(x=np.transpose(reduced_data)[1],
+                                  y=np.transpose(reduced_data)[0],
+                                  c=colors,
+                                  s=100,
+                                  cmap="hsv",
+                                  vmin=0,
+                                  vmax=180
+                                  )
+                plt.xlabel("X")
+                plt.ylabel("Y")
+                plt.title(f"{reduction_method.__name__.split('_')[-1]}_{day}_dim={dim}_tp={time_point}")
+                plt.legend(*fig.legend_elements(),
+                           loc="lower right", title="Classes", bbox_to_anchor=(1.1, 0.5))
+                if save:
+                    os.makedirs(os.path.join(BP, "data", f"{day}__tp={time_point}"), exist_ok=True)
+                    plt.savefig(os.path.join(BP, "data", f"{day}__tp={time_point}",
+                                             f"{reduction_method.__name__.split('_')[-1]}_dim={dim}.png"))
+                plt.show()
+            elif dim == 3:
+                fig = plt.figure()
+                ax = fig.add_subplot(projection='3d')
+                ax.scatter(*np.transpose(reduced_data),
+                           c=colors,
+                           s=100,
+                           cmap="hsv",
+                           vmin=0,
+                           vmax=180
+                           )
+                plt.xlabel("X")
+                plt.ylabel("Y")
+                plt.ylabel("Z")
+                plt.title(f"{reduction_method.__name__.split('_')[-1]}_{day}_dim={dim}_tp={time_point}")
+                plt.legend()
+                if save:
+                    os.makedirs(os.path.join(BP, "data", f"{day}__tp={time_point}"), exist_ok=True)
+                    plt.savefig(os.path.join(BP, "data", f"{day}__tp={time_point}",
+                                             f"{reduction_method.__name__.split('_')[-1]}_dim={dim}.png"))
+                plt.show()
+        return f1
 
-    def pca_components(self,
-                      day: str = "Day_EO+6",
-                      time_point: int = 2,
-                      dim: int = 2,
-                      save: bool = True):
-        # zB (8, 18, 8, 135, 160)
-        orig_shape = self.data[day].binocular.shape
-        # print(orig_shape)
-        d1 = self.data[day].binocular
-        # preprocess
-        d1 = np.reshape(d1, d1.shape[:3] + tuple([d1.shape[-1] * d1.shape[-2]]))
-        d1 = np.reshape(d1[time_point], (d1[time_point].shape[0] * d1[time_point].shape[1], d1[time_point].shape[-1]))
-        imp_mean = SimpleImputer(missing_values=np.nan, strategy='constant', keep_empty_features=True, fill_value=0)
-        d1 = imp_mean.fit_transform(d1)
-        x = preprocessing.normalize(d1)
+    def train_svm(self, x: np.ndarray, y: np.ndarray) -> Tuple[float, float]:
+        from sklearn import svm
+        from sklearn.metrics import classification_report
+        from sklearn.utils import shuffle
+        le = preprocessing.LabelEncoder()
+        y = le.fit_transform(y)
+        x, y = shuffle(x, y, random_state=0)
+        x_train = x[:int(len(x) * 0.8)]
+        x_test = x[int(len(x) * 0.8):]
+        y_train = y[:int(len(y) * 0.8)]
+        y_test = y[int(len(y) * 0.8):]
+        # train
+        clf = svm.SVC()
+        clf.fit(x_train, y_train)
+        # test
+        y_pred = clf.predict(x_test)
+        res = classification_report(y_test, y_pred, output_dict=True)
+        return res["accuracy"], res["weighted avg"]["f1-score"]
 
-        colors = []
-
-        """for i in range(orig_shape[1]):
-        for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
-            colors.extend(18*[j])
-            #for j in [0, 45, 90, 135, 22.5, 67.5, 112.5, 157.5]:
-                #colors.append(j)"""
-
-        # used
-        for i in range(orig_shape[1] // 2):
-
-            # for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
-            for j in [0, 45, 90, 135, 0, 45, 90, 135]:
-                colors.append(j)
-        for i in range(orig_shape[1] // 2, orig_shape[1]):
-
-            # for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
-            for j in [22.5, 67.5, 112.5, 157.5, 22.5, 67.5, 112.5, 157.5]:
-                colors.append(j)
-
-        colors = np.array(colors)
-        pca = PCA(n_components=dim)
-        pca_data = pca.fit_transform(x)
-        return pca, pca_data
-
+    @staticmethod
+    def do_nothing(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
+        return x
 
     @staticmethod
     def f_pca(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
@@ -212,7 +222,7 @@ class Dataset:
 
     @staticmethod
     def f_tsne(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
-        tsne = TSNE(n_components=dim)
+        tsne = TSNE(n_components=dim, perplexity=70)
         return tsne.fit_transform(x)
 
     @staticmethod
@@ -320,6 +330,28 @@ class Dataset:
             self.animate_plots(day=day, dim=2, function_name=method)
             self.animate_plots(day=day, dim=3, function_name=method)
 
+    def svm_day_fixed(self, day: str, dim=2):
+        plt.gca().set_prop_cycle(plt.cycler('color', plt.cm.jet(np.linspace(0, 1, num_plots))))
+        x = [i for i in range(8)]
+        for method in [i for i in dir(self) if i[:2] == "f_" and callable(getattr(self, i))] + ["do_nothing"]:
+            if method in ["f_rastermap"]:
+                pass
+            else:
+                y = []
+                method = getattr(self, method)
+                with HiddenPrints():
+                    for j in x:
+                        if method.__name__ == "do_nothing":
+                            y.append(self.dim_reduction(method, day, time_point=j, dim=200, save=False, train_svm=True, do_plot=False))
+                        else:
+                            y.append(self.dim_reduction(method, day, time_point=j, dim=dim, save=False, train_svm=True, do_plot=False))
+                plt.plot(x, y, label=method.__name__.split("_")[-1])
+        plt.xlabel("timepoint")
+        plt.ylabel("f1-Score")
+        plt.title(f"Day:{day}__Dim:{dim}")
+        plt.legend(loc="upper left")
+        plt.show()
+
 
 if __name__ == "__main__":
     ds = Dataset()
@@ -336,7 +368,8 @@ if __name__ == "__main__":
     ds.task_1(Dataset.f_cebra, time_point=2)
     ds.task_1(Dataset.f_rastermap, time_point=2)
     """
-    ds.dim_reduction(ds.pca_explain, day="Day_EO+6", time_point=1)
+    ds.svm_day_fixed(day="Day_EO+6", dim=3)
+    # ds.dim_reduction(ds.f_isomap, day="Day_EO-2", time_point=4, dim=3, train_svm=True)
     # ds.dim_reduction(Dataset.f_cebra, time_point=1, dim=3)
     # ds.dim_reduction(Dataset.f_pca, time_point=2, dim=3)
     # ds.dim_reduction(Dataset.f_cebra, time_point=2, dim=2)
