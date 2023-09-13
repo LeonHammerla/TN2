@@ -152,10 +152,63 @@ class Dataset:
                                          f"{reduction_method.__name__.split('_')[-1]}_dim={dim}.png"))
             plt.show()
 
+    def pca_components(self,
+                      day: str = "Day_EO+6",
+                      time_point: int = 2,
+                      dim: int = 2,
+                      save: bool = True):
+        # zB (8, 18, 8, 135, 160)
+        orig_shape = self.data[day].binocular.shape
+        # print(orig_shape)
+        d1 = self.data[day].binocular
+        # preprocess
+        d1 = np.reshape(d1, d1.shape[:3] + tuple([d1.shape[-1] * d1.shape[-2]]))
+        d1 = np.reshape(d1[time_point], (d1[time_point].shape[0] * d1[time_point].shape[1], d1[time_point].shape[-1]))
+        imp_mean = SimpleImputer(missing_values=np.nan, strategy='constant', keep_empty_features=True, fill_value=0)
+        d1 = imp_mean.fit_transform(d1)
+        x = preprocessing.normalize(d1)
+
+        colors = []
+
+        """for i in range(orig_shape[1]):
+        for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
+            colors.extend(18*[j])
+            #for j in [0, 45, 90, 135, 22.5, 67.5, 112.5, 157.5]:
+                #colors.append(j)"""
+
+        # used
+        for i in range(orig_shape[1] // 2):
+
+            # for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
+            for j in [0, 45, 90, 135, 0, 45, 90, 135]:
+                colors.append(j)
+        for i in range(orig_shape[1] // 2, orig_shape[1]):
+
+            # for j in [0, 22.5, 45, 67.5, 90, 112.5, 135, 157.5]:
+            for j in [22.5, 67.5, 112.5, 157.5, 22.5, 67.5, 112.5, 157.5]:
+                colors.append(j)
+
+        colors = np.array(colors)
+        pca = PCA(n_components=dim)
+        pca_data = pca.fit_transform(x)
+        return pca, pca_data
+
+
     @staticmethod
     def f_pca(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
         pca = PCA(n_components=dim)
         return pca.fit_transform(x)
+
+    @staticmethod
+    def pca_explain(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
+        pca = PCA(n_components=dim)
+        pca_data = pca.fit_transform(x)
+        print("compo")
+        print(pca.components_)
+        print()
+        print(pca.explained_variance_)
+        return pca_data
+
 
     @staticmethod
     def f_tsne(x: np.ndarray, dim: int, **kwargs) -> np.ndarray:
@@ -283,8 +336,9 @@ if __name__ == "__main__":
     ds.task_1(Dataset.f_cebra, time_point=2)
     ds.task_1(Dataset.f_rastermap, time_point=2)
     """
+    ds.dim_reduction(ds.pca_explain, day="Day_EO+6", time_point=1)
     # ds.dim_reduction(Dataset.f_cebra, time_point=1, dim=3)
-    ds.dim_reduction(Dataset.f_pca, time_point=2, dim=3)
+    # ds.dim_reduction(Dataset.f_pca, time_point=2, dim=3)
     # ds.dim_reduction(Dataset.f_cebra, time_point=2, dim=2)
     # ds.dim_reduction(Dataset.f_cebra, time_point=2, dim=3)
     """for t in range(8):
