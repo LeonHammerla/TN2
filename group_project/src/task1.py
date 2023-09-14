@@ -332,13 +332,15 @@ class Dataset:
         nframes = 8
         plt.subplots_adjust(top=1, bottom=0, left=0, right=1)
         os.makedirs(os.path.join(BP, "data", "gifs", day), exist_ok=True)
+
         def animate(i):
             im = plt.imread(os.path.join(BP, "data", f"{day}__tp={i}", f"{function_name}_dim={dim}.png"))
             plt.imshow(im)
 
         anim = FuncAnimation(plt.gcf(), animate, frames=nframes,
                              interval=(interval / nframes))
-        anim.save(filename=os.path.join(BP, f"data/gifs/{day}", f"{day}_{function_name}_dim={dim}.gif"), writer='imagemagick')
+        anim.save(filename=os.path.join(BP, f"data/gifs/{day}", f"{day}_{function_name}_dim={dim}.gif"),
+                  writer='imagemagick')
 
     def run_all(self,
                 day: str = "Day_EO+6",
@@ -348,11 +350,13 @@ class Dataset:
                 ):
         for method in [i for i in dir(self) if i[:2] == "f_" and callable(getattr(self, i))]:
             method = getattr(self, method)
-            self.dim_reduction(reduction_method=method, day=day, time_point=time_point, dim=2, save=save, data_type=dt, show_plot=False)
+            self.dim_reduction(reduction_method=method, day=day, time_point=time_point, dim=2, save=save, data_type=dt,
+                               show_plot=False)
 
         for method in [i for i in dir(self) if i[:2] == "f_" and callable(getattr(self, i))]:
             method = getattr(self, method)
-            self.dim_reduction(reduction_method=method, day=day, time_point=time_point, dim=3, save=save, data_type=dt, show_plot=False)
+            self.dim_reduction(reduction_method=method, day=day, time_point=time_point, dim=3, save=save, data_type=dt,
+                               show_plot=False)
 
     def run_all_whole_day(self, day: str, dt: str = "bin"):
         for t in range(8):
@@ -379,12 +383,13 @@ class Dataset:
             bar.update(1)
 
     def train_day_fixed(self,
-                      classifier: Callable[[np.ndarray, np.ndarray], Tuple[float, float]],
-                      day: str, dim=2,
-                      ):
+                        classifier: Callable[[np.ndarray, np.ndarray], Tuple[float, float]],
+                        day: str, dim=2,
+                        ):
         plot_colors = sns.color_palette(cc.glasbey_light, n_colors=20)
         x = [i for i in range(8)]
-        for idx, method in enumerate([i for i in dir(self) if i[:2] == "f_" and callable(getattr(self, i))] + ["do_nothing"]):
+        for idx, method in enumerate(
+                [i for i in dir(self) if i[:2] == "f_" and callable(getattr(self, i))] + ["do_nothing"]):
             if method in ["f_rastermap"]:
                 pass
             else:
@@ -404,14 +409,17 @@ class Dataset:
         plt.title(f"Day:{day}__Dim:{dim}")
         plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left')
         plt.tight_layout()
+        plt.savefig(os.path.join(BP, "data", "classifier_results",
+                                 f"{classifier.__name__.split('_')[-1]}_day={day}_dim={dim}.png"))
         plt.show()
 
     def train_tp_fixed(self,
-                      classifier: Callable[[np.ndarray, np.ndarray], Tuple[float, float]],
-                      tp: int, dim=2):
+                       classifier: Callable[[np.ndarray, np.ndarray], Tuple[float, float]],
+                       tp: int, dim=2):
         plot_colors = sns.color_palette(cc.glasbey_light, n_colors=20)
         x = ["-2", "+0", "+2", "+4", "+6"]
-        for idx, method in enumerate([i for i in dir(self) if i[:2] == "f_" and callable(getattr(self, i))] + ["do_nothing"]):
+        for idx, method in enumerate(
+                [i for i in dir(self) if i[:2] == "f_" and callable(getattr(self, i))] + ["do_nothing"]):
             if method in ["f_rastermap"]:
                 pass
             else:
@@ -420,10 +428,12 @@ class Dataset:
                 with HiddenPrints():
                     for j in x:
                         if method.__name__ == "do_nothing":
-                            y.append(self.dim_reduction(method, day=f"Day_EO{j}", time_point=tp, dim=200, save=False, do_train=True,
+                            y.append(self.dim_reduction(method, day=f"Day_EO{j}", time_point=tp, dim=200, save=False,
+                                                        do_train=True,
                                                         do_plot=False, classifier=classifier))
                         else:
-                            y.append(self.dim_reduction(method, day=f"Day_EO{j}", time_point=tp, dim=dim, save=False, do_train=True,
+                            y.append(self.dim_reduction(method, day=f"Day_EO{j}", time_point=tp, dim=dim, save=False,
+                                                        do_train=True,
                                                         do_plot=False, classifier=classifier))
                 plt.plot(x, y, label=method.__name__.split("_")[-1], color=plot_colors[idx % len(plot_colors)])
         plt.xlabel("timepoint")
@@ -431,8 +441,9 @@ class Dataset:
         plt.title(f"TP:{tp}__Dim:{dim}")
         plt.legend(bbox_to_anchor=(1.05, 1.0), loc='upper left')
         plt.tight_layout()
+        plt.savefig(os.path.join(BP, "data", "classifier_results",
+                                 f"{classifier.__name__.split('_')[-1]}_tp={tp}_dim={dim}.png"))
         plt.show()
-
 
 
 if __name__ == "__main__":
@@ -450,10 +461,16 @@ if __name__ == "__main__":
     ds.task_1(Dataset.f_cebra, time_point=2)
     ds.task_1(Dataset.f_rastermap, time_point=2)
     """
-    ds.run()
+    ds.train_day_fixed(ds.train_knn, day="Day_EO-2", dim=2)
+    ds.train_day_fixed(ds.train_knn, day="Day_EO+0", dim=2)
+    ds.train_day_fixed(ds.train_knn, day="Day_EO+2", dim=2)
+    ds.train_day_fixed(ds.train_knn, day="Day_EO+4", dim=2)
+    ds.train_day_fixed(ds.train_knn, day="Day_EO+6", dim=2)
+    # ds.run()
+    # ds.train_tp_fixed(ds.train_knn, 2, dim=2)
     # ds.train_day_fixed(ds.train_knn, day="Day_EO+4", dim=3)
     # ds.train_tp_fixed(ds.train_knn, tp=6, dim=3)
-    # ds.dim_reduction(ds.f_isomap, day="Day_EO-2", time_point=4, dim=3, train_svm=True)
+    # ds.dim_reduction(ds.f_lle, day="Day_EO+6", time_point=2, dim=2)
     # ds.dim_reduction(Dataset.f_cebra, time_point=1, dim=3)
     # ds.dim_reduction(Dataset.f_pca, time_point=2, dim=3)
     # ds.dim_reduction(Dataset.f_cebra, time_point=2, dim=2)
